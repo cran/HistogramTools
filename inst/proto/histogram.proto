@@ -1,4 +1,3 @@
-
 package HistogramTools;
 
 message HistogramState {

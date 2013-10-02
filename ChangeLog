@@ -1,0 +1,37 @@
+2013-10-01  Murray Stokely  <murray@FreeBSD.org>
+
+	* R/histogram.R (as.Message.histogram): Prefix RProtoBuf calls
+	  with RProtoBuf:: too appease R CMD CHECK.
+	* man/ash.Rd: Appease R CMD CHECK.
+	* R/plot.R (PlotLog2ByteEcdf): Idem.
+	* R/zzz.R: Remove again, load proto defs in coercion functions.
+	* DESCRIPTION (Depends): Remove unused dependency on methods.
+	* NAMESPACE: Tighten up what we import and export.
+
+2013-09-30  Murray Stokely  <murray@FreeBSD.org>
+
+	* R/plot.R (PlotLog2ByteEcdf): Add function for creating better
+	  Ecdfs of data binned on power of 2 boundaries (bytes).
+	* man/plot.Rd: Document the above.
+	* vignettes/HistogramTools.Rnw (subsection{Log-scale Histograms}): 
+	  Document the above.
+
+2013-09-15  Murray Stokely  <murray@FreeBSD.org>
+
+	* vignettes/HistogramTools-UnitTests.Rnw: Add a vignette showing
+	  results of the unit tests.
+
+2013-09-14  Murray Stokely  <murray@FreeBSD.org>
+
+	* R/ash.R (HistToASH): Implement support for smoothing out a
+	  histogram with average shifted histograms from ash package.
+	* vignettes/HistogramTools.Rnw: Document the above.
+
+2013-09-13  Murray Stokely  <murray@FreeBSD.org>
+
+	* DESCRIPTION: Update date, move RProtoBuf to enhances line.
+	* vignettes/HistogramTools.Rnw: Make this build without
+	  RProtoBuf installed
+	* vignettes/HistogramTools-quickref.Rnw: Add quick reference
+	  vignette.
+	* informationloss.R: Improve default plot titles.

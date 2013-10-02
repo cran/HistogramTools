@@ -38,7 +38,6 @@
   return(hist)
 }
 
-
 .UpdateHistogram <- function(x) {
   # Takes a histogram with possibly modified counts and breaks and updates
   # all other required fields to be consistent.
@@ -81,7 +80,6 @@
   # Now we know that all histograms have identical breaks.
   cnts <- unname(lapply(x, function(y) y$counts))
   sum.cnts <- Reduce("+", cnts)
-
   return(.BuildHistogram(breaks = x[[1]]$breaks,
                          counts = sum.cnts,
                          xname = main))
@@ -156,14 +154,15 @@ as.Message.histogram <- function(x) {
   stopifnot(!is.null(x$breaks))
   stopifnot(is.numeric(x$breaks))
   stopifnot(require(RProtoBuf))
+
   # We can't conditionally require RProtoBuf and do this in onload()
   if (("RProtoBuf:DescriptorPool" %in% search()) &&
       !exists("HistogramTools.HistogramState",
               where="RProtoBuf:DescriptorPool")) {
-    readProtoFiles(package="HistogramTools")
+    RProtoBuf::readProtoFiles(package="HistogramTools")
   }
 
-  hist.class <- P("HistogramTools.HistogramState")
+  hist.class <- RProtoBuf::P("HistogramTools.HistogramState")
   hist.msg <- new(hist.class)
 
   hist.msg$counts <- x$counts

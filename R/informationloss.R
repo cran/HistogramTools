@@ -15,7 +15,7 @@
 # Author: mstokely@google.com (Murray Stokely)
 
 KSDCC <- function(h) {
-  # Kolmogorv-Smirnov Distance of the Cumulative Curves
+  # Kolmogorov-Smirnov Distance of the Cumulative Curves
   # (aka Maximum Displacement of the Cumulative Curves)
   #
   # Kolmogorov-Smirnov distance between the largest and smallest
@@ -38,6 +38,7 @@ KSDCC <- function(h) {
   # (The knots() of these ECDFs are our histogram break points.
   #  So we evaluate the differences at the histogram mid points.)
 
+  stopifnot(inherits(h, "histogram"))
   # However, this is more succintly expressed as:
   return(max(h$counts) / sum(h$counts))
 }
@@ -77,12 +78,14 @@ EMDCC <- function(h) {
   #
   #   return(sum(areas.of.cdf.uncertainty) / total.area)
 
+  stopifnot(inherits(h, "histogram"))
   # However, this is more succintly expressed as:
   return(sum(diff(h$breaks) * h$counts) / sum(h$counts) /
          diff(range(h$breaks)))
 }
 
-PlotKSDCC <- function(h, arrow.size.scale=1, main=NULL) {
+PlotKSDCC <- function(h, arrow.size.scale=1, main=paste("KSDCC =", KSDCC(h)),
+                      ...) {
   # Plot a CDF from the given histogram along with a red arrow
   # indicating the point of maximum distance between the possible CDFs
   # of the underlying unbinned distribution corresponding to the KSDCC.
@@ -91,14 +94,13 @@ PlotKSDCC <- function(h, arrow.size.scale=1, main=NULL) {
   #   h: An S3 histogram object.
   #   arrow.size.scale: An optional value to scale the size of the arrow head
   #   main: A title for the plot.
+  #   ...: Additional arguments to pass to plot().
 
+  stopifnot(inherits(h, "histogram"))
+  stopifnot(is.character(main), length(main) == 1)
   MinEcdf <- HistToEcdf(h, f=0)
   MaxEcdf <- HistToEcdf(h, f=1)
-  if (!is.null(main)) {
-    plot(MaxEcdf, main=main)
-  } else {
-    plot(MaxEcdf)
-  }
+  plot(MaxEcdf, main=main, ...)
 
   index.of.max <- which.max(h$counts)
   height <- max(h$counts) / sum(h$counts)
@@ -111,7 +113,7 @@ PlotKSDCC <- function(h, arrow.size.scale=1, main=NULL) {
          code=3, col="red", lwd=3)
 }
 
-PlotEMDCC <- function(h, main=NULL) {
+PlotEMDCC <- function(h, main=paste("EMDCC =", EMDCC(h)), ...) {
   # Plot a CDF from the given histogram with a yellow boxes
   # covering all possible ranges for the e.c.d.f of the underlying
   # distribution from which the binned histogram was created.
@@ -119,14 +121,13 @@ PlotEMDCC <- function(h, main=NULL) {
   # Args:
   #   h: An S3 histogram object.
   #   main: A title for the plot.
+  #   ...: Additional arguments to pass to plot().
 
+  stopifnot(inherits(h, "histogram"))
+  stopifnot(is.character(main), length(main) == 1)
   MinEcdf <- HistToEcdf(h, f=0)
   MaxEcdf <- HistToEcdf(h, f=1)
-  if (!is.null(main)) {
-    plot(MaxEcdf, main=main)
-  } else {
-    plot(MaxEcdf)
-  }
+  plot(MaxEcdf, main=main, ...)
   rect(head(knots(MinEcdf), -1),
        MinEcdf(head(knots(MinEcdf), -1)),
        tail(knots(MinEcdf), -1),
