@@ -22,7 +22,7 @@
   all(abs(diffs - diffs[1]) < .Machine$double.eps^0.5 * max(diffs))
 }
 
-.BuildHistogram <- function(breaks, counts, xname="") {
+PreBinnedHistogram <- .BuildHistogram <- function(breaks, counts, xname="") {
   # Returns a histogram object from the given list of breaks and counts.
 
   stopifnot(is.numeric(breaks), is.numeric(counts))
@@ -105,6 +105,22 @@ AddHistograms <- function(..., x=list(...), main=.NewHistogramName(x)) {
     # length > 1
     return(.AddManyHistograms(x, main=main))
   }
+}
+
+ScaleHistogram <- function(x, factor=1 / Count(x)) {
+  # Scale the counts of each bucket in a histogram by a factor.
+  #
+  # Args:
+  #   x:       A histogram object.
+  #   factor:  Scaling factor for the counts.
+  #
+  # Returns:
+  #   An S3 histogram class suitable for plotting.
+
+  stopifnot(inherits(x, "histogram"))
+  stopifnot(is.numeric(factor), length(factor) == 1)
+  x$counts <- x$counts * factor
+  return(.UpdateHistogram(x))
 }
 
 # S3 Generics

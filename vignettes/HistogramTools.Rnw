@@ -1,6 +1,7 @@
 \documentclass{article}
 \usepackage{amsfonts}
-%\VignetteIndexEntry{HistogramTools-intro}
+% TODO(mstokely): Can use a larger title here with spaces and such.
+%\VignetteIndexEntry{HistogramTools-Intro}
 
 %% JSS stuff we can remove for JSS version.
 \usepackage[authoryear,round,longnamesfirst]{natbib}
@@ -34,7 +35,7 @@
 %   \citeauthor*{key} ==>>          Jones, Baker, and Smith
 %   \citeyear{key} ==>>             1990
 
-%%
+\newcommand{\keywords}[1]{\textbf{Keywords: }#1}
 \newcommand{\code}[1]{\texttt{#1}}
 \newcommand{\pkg}[1]{\textbf{#1}}
 \usepackage{Sweave}
@@ -50,6 +51,7 @@ ht.version <- packageDescription("HistogramTools")$Version
 prettyDate <- format(Sys.Date(), "%B %e, %Y")
 @
 % closing $ needed here
+
 
 %% almost as usual
 \author{Murray Stokely}
@@ -72,7 +74,11 @@ prettyDate <- format(Sys.Date(), "%B %e, %Y")
   for sharing between distributed tasks, functions for
   manipulating the resulting aggregate histograms, and functions for
   measuring and visualizing the information loss associated with
-  histogram representations of a data set.
+  histogram representations of a data set.\\
+\vspace{1ex}
+
+\noindent
+\keywords{histograms, distance, non-parametric, metric, map-reduce}
 }
 % \Keywords{histograms, distributions, R, mapreduce, protocol buffers, RProtoBuf}
 % \Plainkeywords{histograms, distributions, R, mapreduce, protocol
@@ -104,6 +110,8 @@ prettyDate <- format(Sys.Date(), "%B %e, %Y")
 %% need no \usepackage{Sweave.sty}
 
 %% end of declarations %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\tableofcontents
 
 \section{Introduction}
 
@@ -148,68 +156,594 @@ questions at hand?
 % distributions of interest Examples from search clusters, distributed
 % filesystems, etc. [cite]
 
-\section{Parallel Data Collection Patterns}
+\section{Histogram Bin Manipulation}
 
-Many large data sets in fields such as particle physics and information
-processing are stored in binned or histogram form in order to reduce
-the data storage requirements \citep{scott2009multivariate}.
+\subsection{Trimming Empty Buckets from the Tails}
 
-There are two common patterns for generating histograms of large data
-sets with MapReduce.  In the first method, each mapper task can
-generate a histogram over a subset of the data that is has been
-assigned, and then the histograms of each mapper are sent to one or
-more reducer tasks to merge.
+When generating histograms with a large number of fine-grained
+bucket boundaries, the resulting histograms may have a large
+number of empty consecutive buckets on the left or right side of the
+histogram.  The \code{TrimHistogram} function can be used to remove
+them, as illustrated in Figure~\ref{fig:trimhist}.
 
-In the second method, each mapper rounds a data point to a bucket
-width and outputs that bucket as a key and '1' as a value.  Reducers
-then sum up all of the values with the same key and output to a data store.
+<<echo=TRUE,print=FALSE>>=
+hist.1 <- hist(runif(100,min=2,max=4), breaks=seq(0,6,by=.2), plot=FALSE)
+hist.trimmed <- TrimHistogram(hist.1)
+@
 
-In both methods, the mapper tasks must choose identical
-bucket boundaries even though they are analyzing disjoint parts of the
-input set that may cover different ranges, or we must implement
-multiple phases.
+<<echo=TRUE,print=TRUE>>=
+length(hist.1$counts)
+sum(hist.1$counts)
+length(hist.trimmed$counts)
+sum(hist.trimmed$counts)
+@
+
+<<trimhist,fig=TRUE,echo=TRUE,include=FALSE,width=8,height=4>>=
+par(mfrow=c(1,2))
+plot(hist.1)
+plot(TrimHistogram(hist.1), main="Trimmed Histogram")
+@
 
 \begin{figure}[h!]
 \begin{center}
-\includegraphics{histogram-mapreduce-diag1.pdf}
+\includegraphics[width=5in,height=2.5in]{HistogramTools-trimhist}
 \end{center}
-\caption{Diagram of MapReduce Histogram Generation Pattern}
-\label{fig:mr-histogram-pattern1}
+\caption{Effect of the \code{TrimHistogram} function.}
+\label{fig:trimhist}
 \end{figure}
 
-Figure~\ref{fig:mr-histogram-pattern1} illustrates the second method
-described above for histogram generation of large data sets with
-MapReduce.
+\subsection{Adding/Merging Histograms}
 
-This package is designed to be helpful if some of the Map or Reduce
-tasks are written in R, or if those components are written in other
-languages and only the resulting output histograms need to be
-manipulated in R.
+If histograms (for different data sets) have the same bucket
+boundaries, it is possible to add them together to obtain the
+histogram for the combined data set by aggregating the counts values
+with the \code{AddHistograms} function illustrated in
+Figure~\ref{fig:mergehist}.
 
-%There are really two cookbook recipes for generating histograms of
-%large data sets.  Have each mapper generate an actual histogram, in
-%which case the reducer must merge them.
+<<echo=TRUE,print=FALSE>>=
+hist.1 <- hist(c(1,2,3,4), plot=FALSE)
+hist.2 <- hist(c(1,2,2,4), plot=FALSE)
+hist.sum <- AddHistograms(hist.1, hist.2)
+@
 
-%Or have each mapper output round to a bucket width and output for
-%every bucket width item then have the reducer sum those up.
+<<mergehist,fig=TRUE,echo=FALSE,include=FALSE,width=8,height=4>>=
+par(mfrow=c(1,3))
+plot(hist.1)
+plot(hist.2)
+plot(hist.sum,main="Aggregated Histogram")
+@
 
-%Why do we do the first one?  Why not the second one?
+\begin{figure}[h!]
+\begin{center}
+\includegraphics[width=5in,height=2.5in]{HistogramTools-mergehist}
+\end{center}
+\caption{Effect of the \code{AddHistograms} function.}
+\label{fig:mergehist}
+\end{figure}
 
-%What is the runtime difference between the two?  Is the second
-%faster?  Or the first?
+\code{AddHistograms} accepts an arbitrary number of histogram objects
+to aggregate as long as they have the same bucket boundaries.
 
-%TODO:
-%Good diagram for paper showing MapReduce generation of histograms.  As described in Hadoop MapReduce cookbook :
+<<echo=TRUE,print=FALSE>>=
+  hist.1 <- hist(c(1,2,3), breaks=0:9, plot=FALSE)
+  hist.2 <- hist(c(1,2,3), breaks=0:9, plot=FALSE)
+  hist.3 <- hist(c(4,5,6), breaks=0:9, plot=FALSE)
+  hist.sum <- AddHistograms(hist.1, hist.2, hist.3)
+  hist.sum
+@
 
-% Histogram makes sense only under a continuous dimension (for example, access time and file % size). It groups the number of occurrences of some event into several groups in the dimension. % For example, in this recipe, if we take the access time from weblogs as the dimension, then we will group the access time by the hour.
+\subsection{Merging Buckets}
+
+We may want a version of a histogram with fewer buckets, to save
+storage or to produce better plots.  The \code{MergeBuckets} function takes
+a histogram and a parameter for the number of adjacent buckets to
+merge together and returns a new histogram with different bucket
+boundaries, as illustrated in Figure~\ref{fig:downsamplehist}.
+
+<<echo=TRUE,print=FALSE>>=
+overbinned <- hist(c(rexp(100), 1+rexp(100)), breaks=seq(0, 10, by=.01), plot=FALSE)
+better.hist <- MergeBuckets(overbinned, adj=30)
+@
+
+<<downsamplehist,fig=TRUE,echo=FALSE,print=FALSE,include=FALSE,width=8,height=4>>=
+par(mfrow=c(1,2))
+plot(overbinned)
+plot(better.hist)
+@
+
+\begin{figure}[h!]
+\begin{center}
+\includegraphics[width=3.3in,height=2.5in]{HistogramTools-downsamplehist}
+\end{center}
+\caption{Effect of the \code{MergeBuckets} function.}
+\label{fig:downsamplehist}
+\end{figure}
+
+\subsection{Subsetting Histograms}
+
+% If, say you are only interested in part of a distribution, for
+% example for performance measurements the requests that had a latency
+% of greater than X seconds only.  Then the SubsetHistogram()
+% functions can help manipulate the histograms to zoom in on an area
+% of interest for additional plotting.
+
+The \code{SubsetHistogram} function takes a histogram and a new
+minimum and maximum bucket boundary and returns a new histogram with a
+subset of the buckets, as illustrated in Figure~\ref{fig:subsethist}.
+
+% TODO(mstokely): Add reference to iceberg queries, database work in
+% this area.
+
+<<echo=TRUE,print=FALSE>>=
+hist.1 <- hist(runif(100, min=0, max=10), breaks=seq(from=0, to=10, by=.5), plot=FALSE)
+hist.2 <- SubsetHistogram(hist.1, minbreak=2, maxbreak=6)
+@
+
+<<subsethist,fig=TRUE,echo=FALSE,print=FALSE,include=FALSE,width=5.3,height=4>>=
+par(mfrow=c(1,2))
+plot(hist.1, main="hist.1")
+plot(hist.2, main="hist.2")
+@
+
+\begin{figure}[h!]
+\begin{center}
+\includegraphics[width=3.3in,height=2.5in]{HistogramTools-subsethist}
+\end{center}
+\caption{Effect of the \code{SubsetHistogram} function.}
+\label{fig:subsethist}
+\end{figure}
+
+\subsection{Intersecting Histograms}
+
+The \code{IntersectHistograms} function takes two histograms with
+identical bucket boundaries and returns a histogram of the
+intersection of the two.  Each bucket of the returned histogram
+contains the minimum of the equivalent buckets in the two provided
+histograms.
+
+<<echo=TRUE,print=FALSE>>=
+hist.1 <- hist(runif(100))
+hist.2 <- hist(runif(100))
+hist.3 <- IntersectHistograms(hist.1, hist.2)
+@
+
+<<intersecthist,fig=TRUE,echo=FALSE,print=FALSE,include=FALSE,width=5.3,height=4>>=
+par(mfrow=c(1,3))
+plot(hist.1, main="hist.1")
+plot(hist.2, main="hist.2")
+plot(hist.3, main="hist.3")
+@
+
+\begin{figure}[h!]
+\begin{center}
+\includegraphics[width=3.3in,height=2.5in]{HistogramTools-intersecthist}
+\end{center}
+\caption{Effect of the \code{IntersectHistograms} function.}
+\label{fig:intersecthist}
+\end{figure}
+
+\subsection{Scaling Histograms}
+
+The \code{ScaleHistogram} function takes a histogram and a numeric
+value to scale each bucket bound by.  This can be used, e.g.\ to
+normalize the histogram area to a desired value, as illustrated in
+Figure~\ref{fig:scalehist}.
+
+<<echo=TRUE,print=FALSE>>=
+hist.2 <- ScaleHistogram(hist.1, 1/sum(hist.1$counts))
+@
+
+<<scalehist,fig=TRUE,echo=FALSE,print=FALSE,include=FALSE,width=5.3,height=4>>=
+par(mfrow=c(1,2))
+plot(hist.1, main="hist.1")
+plot(hist.2, main="hist.2")
+@
+
+\begin{figure}[h!]
+\begin{center}
+\includegraphics[width=3.3in,height=2.5in]{HistogramTools-scalehist}
+\end{center}
+\caption{Effect of the \code{ScaleHistogram} function.}
+\label{fig:scalehist}
+\end{figure}
+
+\section{Histogram Distance Measures}
+
+This package provides a number of metrics for computing a distance
+measure for two histograms.  At the moment, only bin-by-bin similarity
+measures are supported meaning that the two histograms must have
+exactly the same bucket boundaries.  The attributes of the different
+distance measures are described in \citep{rubner2000earth}.
+
+\subsection{Minkowski Distance}
+
+The Minkowski distance of order $p$ between two histograms can be
+computed with the \code{minkowski.dist} function.
+
+<<echo=TRUE,print=FALSE>>=
+h1 <- hist(runif(100), plot=FALSE)
+h2 <- hist(runif(100), plot=FALSE)
+
+minkowski.dist(h1, h2, 1)
+minkowski.dist(h1, h2, 2)
+minkowski.dist(h1, h2, 3)
+
+# Verify the implementation:
+p <- 3
+#dist(t(matrix(c(h1$counts, h2$counts), nrow=2)), "minkowski", p=p)
+# Or, alternatively:
+(sum(abs(h1$counts - h2$counts)^p))^(1/p)
+@
+
+\subsection{Histogram Intersection Distance}
+
+The histogram intersection distance \citep{swain1991color} between two
+histograms can be computed with the \code{intersect.dist} function.
+
+<<echo=TRUE,print=FALSE>>=
+intersect.dist(h1, h2)
+@
+
+If histograms \code{h1} and \code{h2} do not contain the
+same number of counts, then this metric will not be symmetric.
+
+\subsection{Kullback-Leibler Divergence}
+
+The Kullback-Leibler Divergence \citep{kullback1997information}
+between two histograms can be computed with the \code{kl.divergence}
+function.
+
+<<echo=TRUE,print=FALSE>>=
+kl.divergence(h1, h2)
+@
+
+\subsection{Jeffrey Divergence}
+
+The \code{jeffrey.divergence} function computes the Jeffrey
+divergence between two histograms \citep{puzicha1997non}.
+
+<<echo=TRUE,print=FALSE>>=
+jeffrey.divergence(h1, h2)
+@
+
+\section{Quantiles and Cumulative Distribution Functions}
+
+When histograms are used as a binned data storage mechanism to reduce
+data storage cost, information about the underlying distribution is
+lost.  We can however approximate the quantiles and cumulative
+distribution function for the underying distribution from the
+histogram.
+
+The \code{Count}, \code{ApproxMean}, and \code{ApproxQuantile}
+functions are meant to help with this, but note that they will only be
+accurate with very granular histogram buckets.  They would rarely be
+appropriate with histogram buckets chosen by the default algorithm in
+R.
+
+<<echo=TRUE>>=
+hist <- hist(c(1,2,3), breaks=c(0,1,2,3,4,5,6,7,8,9), plot=FALSE)
+@
+<<echo=TRUE,print=TRUE>>=
+Count(hist)
+ApproxMean(hist)
+ApproxQuantile(hist, .5)
+ApproxQuantile(hist, c(.05, .95))
+@
+
+The \code{HistToEcdf} function takes a histogram and returns an
+empirical distribution function similar to what is returned by the
+\code{ecdf} function on a distribution.
+
+<<execdf,fig=TRUE,include=FALSE,echo=TRUE,height=4,width=8>>=
+h <- hist(runif(100), plot=FALSE)
+e <- HistToEcdf(h)
+e(.5)
+par(mfrow=c(1,2))
+plot(h)
+plot(HistToEcdf(h))
+par(mfrow=c(1,1))
+@
+
+\begin{figure}[h]
+\begin{center}
+\includegraphics[width=6in,height=3in]{HistogramTools-execdf}
+\end{center}
+\caption{Histogram and CDF Created with HistToEcdf}
+\label{fig:excdf}
+\end{figure}
+
+\section{Error estimates in CDFs approximated from histograms}
+
+When constructing cumulative distribution functions from binned
+histogram data sets there will usually be some amount of
+information loss.  We can however come up with an upper bound
+for the error by looking at two extreme cases.  For a given histogram
+$h$ with bucket counts $C_i$ for $1 \le i \le n$ and left-closed bucket boundaries
+$B_i$ for $1 \le i \le n+1$, we construct two data sets.  Let $X$ be
+the (unknown) underlying data set for which we now only have the
+binned representation $h$.  Let $X_{\rm{min}}$ be the data set constructed
+by assuming the data points in each bucket of the histogram are all
+equal to the left bucket boundary.  Let $X_{\rm{max}}$ be the data
+set constructed by assuming the data points in each bucket of the
+histogram are at the right bucket boundary. Then
+%histogram are all infinitesimally close to the right bucket boundary. Then
+$F_X$ is the true empirical CDF of the underlying data, 
+% $F(X_b)$ is any estimate of the empirical CDF based on the binned data, 
+and
+$F_{X_{\rm{min}}}(x) \ge F_X(x) \ge F_{X_{\rm{max}}}(x)$. 
+
+%If $F(x)$ is the true empirical CDF of the underying data, and
+%$F_b(x)$ is any estimate of the empirical CDF based on the binned
+%data, then we can compute an error estimate by integrating the
+%difference between the largest and smallest CDFs that could be
+%represented by the binned data.  
+
+% TODO(mstokely): Technically one of these is a limit, plus epsilon
+\begin{displaymath}
+X_{\rm{min}} = \left ( (B_i)_{k=1}^{C_i} : 1 \le i \le n \right ) \\
+X_{\rm{max}} = \left ( (B_{i+1})_{k=1}^{C_i} : 1 \le i \le n \right )
+\end{displaymath}
+% x1 <- rep(head(h$breaks, -1), h$counts)
+% x2 <- rep(tail(h$breaks, -1), h$counts)
+
+The package provides two different distance metrics to measure the
+difference between empirical cumulative distribution functions
+$F_{X_{\rm{min}}}$ and $F_{X_{\rm{max}}}$.  These distances serve as
+upper-bounds for the amount of error between the true empirical
+distribution function $F_X$ of the unbinned data and an ECDF
+calculated from the binned data.
+
+<<echo=FALSE,print=FALSE>>=
+PlotAll <- function(x, h) {
+  plot(x, main="x")
+  plot(h)
+  PlotKSDCC(h, 0.3)
+  PlotEMDCC(h)
+}
+@
+
+\subsection{Kolmogorov-Smirnov Distance of the Cumulative Curves}
+
+The first metric provided by the package is the two-sample
+Kolmogorov-Smirnov distance between $X_{\rm{min}}$ and $X_{\rm{max}}$.
+In other words, it the largest possible distance between cumulative
+distribution functions that could be represented by the binned data.
+This metric is more formally defined as
+
+\begin{displaymath}
+\sup_{x} \left | F_{X_{\rm{max}}}(x) - F_{X_{\rm{min}}}(x) \right |
+\end{displaymath}
+
+This function is also occasionally called the maximum displacement of
+the cumulative curves (MDCC).
+
+<<echo=TRUE,print=FALSE>>=
+x <- rexp(1000)
+h <- hist(x, breaks=c(0,1,2,3,4,8,16,32), plot=FALSE)
+x.min <- rep(head(h$breaks, -1), h$counts)
+x.max <- rep(tail(h$breaks, -1), h$counts)
+ks.test(x.min, x.max, exact=F)
+KSDCC(h)
+@
+
+The \code{KSDCC} function accepts a histogram, generates the largest
+and smallest empirical cumulative distribution functions that could be
+represented by that histogram, and then calculates the
+Kolmogorov-Smirnov distance between the two CDFs.  This measure can be
+used in cases where expanding the binned data into \code{x.min} and
+\code{x.max} explicitly to calculate distances using
+e.g.\ \code{ks.test} directly would not be feasible.
+Figure~\ref{fig:KSDCC} illustrates geometrically what value is being
+returned.
+
+<<hist1mdcc,fig=TRUE,echo=FALSE,print=FALSE,include=FALSE,height=4,width=8>>=
+par(mfrow=c(2,3))
+
+x <- rexp(100)
+h1 <- hist(x, plot=FALSE)
+h2 <- hist(x, breaks=seq(0,round(max(x) + 1),by=0.1), plot=FALSE)
+
+plot(sort(x), main="sort(x)")
+plot(h1)
+PlotKSDCC(h1, 0.2, main="CDF with KSDCC")
+
+plot(sort(x), main="sort(x)")
+plot(h2)
+PlotKSDCC(h2, 0.2, main="CDF with KSDCC")
+@
+
+\begin{figure}[h!]
+\begin{center}
+\includegraphics[width=6in,height=3in]{HistogramTools-hist1mdcc}
+\end{center}
+\caption{Sorted raw data (column 1), Histograms (column 2), CDF with
+  KSDCC (column 3)}
+\label{fig:KSDCC}
+\end{figure}
+
+\subsection{Earth Mover's Distance of the Cumulative Curves}
+% The histograms above were generated using the default computed
+%breakpoints of R, which uses a modified algorithm from
+%\cite{sturges1926choice}.  However, for our actual data analysis tasks
+%we generate our own bucket widths in advance so that all of our
+%histograms have comparable and consistent bucket boundaries.  For the
+%same distribution, we obviously have control over the histogram bins,
+%and using more fine-grained bins produces a more accurate
+%representation of the underlying distribution.
+
+% TODO kind of like iceberg histograms, but not quite. there are
+% references from the database community for what we do and why.
+
+%A natural question is, are we using a good initial choice of buckets?
+%Which of the 100,000 histograms that we generated last week had the
+%greatest potential error, and how might we change the bucketing to
+%reduce that error?
 %
-%The following figure shows a summary of the execution. Here the mapper calculates the hour of %the day and emits the "hour of the day" and 1 as the key and value respectively. Then each %reducer receives all the occurrences of one hour of a day, and calculates the number of %occurrences:
-% THIS ABOVE IS FROM :
-%\url{http://my.safaribooksonline.com/book/-/9781849517287/6dot-analytics/ch06s06_html}
+% subsubsection KS
+%
+%Mean Square Error measures the accuracy of an estimator of f in a single point, MISE Mean Integrated Squared Error is the global metric.  But we don't know f for the underlying distribution, since we only have the histogram, so we can't compute these metrics, right?
+%
+%If $F(x)$ is the true empirical CDF of the underying data, and
+%$F_b(x)$ is any estimate of the empirical CDF based on the binned
+%data, then we can compute an error estimate by integrating the
+%difference between the largest and smallest CDFs that could be
+%represented by the binned data.
+%
+% we can use an integrated version of the Kolmogorov-Smirnov
+% distance to compute the error due to our binning.
 
-%\section{Applications}
-%Very large data sets in Pearson's day meant more than 100 observations, but analysis of web-scale data, such as the number of unlinks in the trillions of pages on the web requires significantly larger computation resources.
-%Pearson was interested in very large data sets (more than 1000)
+The ``Earth Mover's Distance'' is like the Kolmogorov-Smirnof
+statistic, but uses an integral to capture the difference across all
+points of the curve rather than just the maximum difference.  This is
+also known as Mallows distance, or Wasserstein distance with $p=1$.
+
+The value of this metric for our histogram $h$ is
+% We remove the \sup because we defined F_max and F_min above.
+% \sup_{F_b,F}
+\begin{displaymath}
+\int_{\mathbb{R}} |F_{X_{\rm{max}}}(x) - F_{X_{\rm{min}}}(x)|dx,
+\end{displaymath}
+
+Figure~\ref{fig:EMDCC} shows the same e.c.d.f of the binned data
+represented in the previous section, but with the yellow boxes
+representing the range of possible values for any real e.c.d.f. having
+the same binned representation.  For any distribution $X$ with the
+binned representation in $h$, the e.c.d.f $F(X)$ will pass only
+through the yellow boxes.  The area of the yellow boxes is the Earth
+Mover's Distance.
+
+<<hist1emdcc,fig=TRUE,echo=FALSE,print=FALSE,include=FALSE,height=4,width=8>>=
+par(mfrow=c(2,3))
+plot(sort(x), main="sort(x)")
+plot(h1)
+PlotEMDCC(h1, main="CDF with EMDCC")
+
+plot(sort(x), main="sort(x)")
+plot(h2)
+PlotEMDCC(h2, main="CDF with EMDCC")
+@
+
+\begin{figure}[h!]
+\begin{center}
+\includegraphics[width=6in,height=3in]{HistogramTools-hist1emdcc}
+\end{center}
+\caption{Sorted raw data (column 1), Histograms (column 2), CDF with
+  EMDCC (column 3)}
+\label{fig:EMDCC}
+\end{figure}
+
+<<echo=TRUE>>=
+x <- rexp(100)
+h1 <- hist(x, plot=FALSE)
+h2 <- hist(x, breaks=seq(0,round(max(x) + 1),by=0.1), plot=FALSE)
+KSDCC(h1)
+KSDCC(h2)
+EMDCC(h1)
+EMDCC(h2)
+@
+
+So, using this metric, the second lower example with more granular
+histogram bins produces an ECDF with reduced worst case error bounds
+compared to the one with default buckets, as expected.
+
+%\begin{figure}[h!]
+%\begin{center}
+%\includegraphics[width=5in,height=2.5in]{HistogramTools-downsamplehist}
+%\end{center}
+%\caption{Effect of the \code{MergeBuckets} function.}
+%\label{fig:downsamplehist}
+%\end{figure}
+
+% TODO
+% \section{Extensions}
+%\subsection{Exemplar Histograms}
+% TODO
+%
+
+%Sharing Histograms Between Tools
+%In a big data analysis task, we may combine many different tools and languages.  For example, high-performance C++ or Java code might process millions of records to generate histograms and then serialize them (using e.g. Protocol buffers or Thrift) to a data store.
+%Other code in Python or R may analyze, merge, clean the resulting outputs.  Finally, a front-end dashboard may read in a JSON representation of the cleaned histograms from the datastore into an interactive Javascript web isualization (sing e.g. D3 (\cite{bostock2011d3}) or Gviz)
+%Implementation details:
+%
+%- Benchmarks of Merge operation
+%Benchmarks
+%Compare size of R serialized histograms and RProtoBuf serialized histograms.
+%%
+%code snippet:
+%
+%Table:  columns:  serialized size, serialized time (ms)
+%rows:  R serialize, Rprotobuf naive implementation, RProtobuf C++ optimized implementation
+
+
+%TODO Table example performance analysis.
+% label=tab1,echo=FALSE,results=tex>>=
+%require(xtable)
+%foo <- data.frame(a=c(1,2,3,4),b=c(5,6,7,8))
+%print(xtable(foo, caption="Example Caption", center="centering", file="", label="tab:one",floating=FALSE))
+%@
+%
+%Now we have an example reference to Table\ref{tab:one}.
+\section{Visualization}
+
+\subsection{Average Shifted Histograms}
+
+Average shifted histograms are a simple device for taking a collection
+of $m$ histograms each with uniform bin width $h$, but with bin
+origins offset/shifted \citep{scott2009multivariate}.
+
+Given the focus of this package on large data sets, a HistToASH
+function is provided to produce the average shifted histogram from a
+single histogram assuming the underlying dataset is no longer
+available in unbinned form.  The next plot shows the original density histogram
+of the overlaid with the average shifted histogram with smoothing
+parameter 5.
+
+<<fig=TRUE>>=
+x <- runif(1000, min=0, max=100)
+h <- hist(x, breaks=0:100, plot=F)
+
+plot(h,freq=FALSE, main="Histogram of x with ASH superimposed in red")
+# Superimpose the Average Shifted Histogram on top of the original.
+lines(HistToASH(h), col="red")
+@
+
+\subsection{Log-scale Histograms}
+
+Many histograms encountered in databases, distributed systems, and
+other areas of computer science use log-scaled bucket boundaries
+and may still contain counts that vary exponentially.
+
+Examples of such data sets include the size or age of files stored, or
+the latency enountered by read requests.  Such histograms can be read
+into R using the methods of this package, but the default plotting
+functionality is not very useful.
+
+For example, Figure~\ref{fig:logloghist} shows the default plot output
+for the histogram of read sizes observed when building a FreeBSD
+kernel.  Neither the density histogram (left) nor the frequency
+histogram (middle) make it easy to understand the distribution.  In
+contract, the log ECDF produced by the \code{PlotLog2ByteEcdf}
+function makes it easy to see that about 20\% of the reads were of 64
+bytes or smaller, and that the median read size was well under a
+kilobyte.
+
+<<logloghist,fig=TRUE,include=FALSE,echo=FALSE,height=4,width=8>>=
+par(mfrow=c(1,3))
+filename <- system.file("unitTests/data/buildkernel-readsize-dtrace.txt",
+                        package="HistogramTools")
+dtrace.hists <- ReadHistogramsFromDtraceOutputFile(filename)
+plot(dtrace.hists[["TOTAL"]], main="", freq=FALSE)
+plot(dtrace.hists[["TOTAL"]], main="", freq=TRUE)
+PlotLog2ByteEcdf(dtrace.hists[["TOTAL"]])
+@
+
+\begin{figure}[h]
+\begin{center}
+\includegraphics[width=5in,height=2.5in]{HistogramTools-logloghist}
+\end{center}
+\caption{Example Log Log Histogram Data}
+\label{fig:logloghist}
+\end{figure}
 
 
 \section{Efficient Representations of Histograms}
@@ -367,482 +901,78 @@ if (require(RProtoBuf)) {
 }
 @
 
-\section{Quantiles and Cumulative Distribution Functions}
+\section{Applications}
 
-When histograms are used as a binned data storage mechanism to reduce
-data storage cost, information about the underlying distribution is
-lost.  We can however approximate the quantiles and cumulative
-distribution function for the underying distribution from the
-histogram.
+\subsection{Filesystem Workload Characterization with DTrace}
 
-The \code{Count}, \code{ApproxMean}, and \code{ApproxQuantile}
-functions are meant to help with this, but note that they will only be
-accurate with very granular histogram buckets.  They would rarely be
-appropriate with histogram buckets chosen by the default algorithm in
-R.
+The DTrace framework \cite{cantrill2004dynamic} provides a scalable
+method of dynamically collecting and aggregating system performance
+data on Unix systems.  The \code{ReadHistogramsFromDtraceOutputFile}
+Parses the text output of the DTrace command to convert the ASCII
+representation of aggregate distributions into R histogram objects.
 
-<<echo=TRUE>>=
-hist <- hist(c(1,2,3), breaks=c(0,1,2,3,4,5,6,7,8,9), plot=FALSE)
-@
-<<echo=TRUE,print=TRUE>>=
-Count(hist)
-ApproxMean(hist)
-ApproxQuantile(hist, .5)
-ApproxQuantile(hist, c(.05, .95))
-@
+\subsection{Binning Large Data Sets with Map-Reduce}
 
-The \code{HistToEcdf} function takes a histogram and returns an
-empirical distribution function similar to what is returned by the
-\code{ecdf} function on a distribution.
+Many large data sets in fields such as particle physics and information
+processing are stored in binned or histogram form in order to reduce
+the data storage requirements \citep{scott2009multivariate}.
 
-<<execdf,fig=TRUE,include=FALSE,echo=TRUE,height=4,width=8>>=
-h <- hist(runif(100), plot=FALSE)
-e <- HistToEcdf(h)
-e(.5)
-par(mfrow=c(1,2))
-plot(h)
-plot(HistToEcdf(h))
-par(mfrow=c(1,1))
-@
+There are two common patterns for generating histograms of large data
+sets with MapReduce.  In the first method, each mapper task can
+generate a histogram over a subset of the data that is has been
+assigned, and then the histograms of each mapper are sent to one or
+more reducer tasks to merge.
 
-\begin{figure}[h]
-\begin{center}
-\includegraphics[width=6in,height=3in]{HistogramTools-execdf}
-\end{center}
-\caption{Histogram and CDF Created with HistToEcdf}
-\label{fig:excdf}
-\end{figure}
+In the second method, each mapper rounds a data point to a bucket
+width and outputs that bucket as a key and '1' as a value.  Reducers
+then sum up all of the values with the same key and output to a data store.
 
-\section{Error estimates in CDFs approximated from histograms}
-
-When constructing cumulative distribution functions from binned
-histogram data sets there will usually be some amount of
-information loss.  We can however come up with an upper bound
-for the error by looking at two extreme cases.  For a given histogram
-$h$ with bucket counts $C_i$ for $1 \le i \le n$ and left-closed bucket boundaries
-$B_i$ for $1 \le i \le n+1$, we construct two data sets.  Let $X$ be
-the (unknown) underlying data set for which we now only have the
-binned representation $h$.  Let $X_{\rm{min}}$ be the data set constructed
-by assuming the data points in each bucket of the histogram are all
-equal to the left bucket boundary.  Let $X_{\rm{max}}$ be the data
-set constructed by assuming the data points in each bucket of the
-histogram are at the right bucket boundary. Then
-%histogram are all infinitesimally close to the right bucket boundary. Then
-$F_X$ is the true empirical CDF of the underlying data, 
-% $F(X_b)$ is any estimate of the empirical CDF based on the binned data, 
-and
-$F_{X_{\rm{min}}}(x) \ge F_X(x) \ge F_{X_{\rm{max}}}(x)$. 
-
-%If $F(x)$ is the true empirical CDF of the underying data, and
-%$F_b(x)$ is any estimate of the empirical CDF based on the binned
-%data, then we can compute an error estimate by integrating the
-%difference between the largest and smallest CDFs that could be
-%represented by the binned data.  
-
-% TODO(mstokely): Technically one of these is a limit, plus epsilon
-\begin{displaymath}
-X_{\rm{min}} = \left ( (B_i)_{k=1}^{C_i} : 1 \le i \le n \right ) \\
-X_{\rm{max}} = \left ( (B_{i+1})_{k=1}^{C_i} : 1 \le i \le n \right )
-\end{displaymath}
-% x1 <- rep(head(h$breaks, -1), h$counts)
-% x2 <- rep(tail(h$breaks, -1), h$counts)
-
-The package provides two different distance metrics to measure the
-difference between empirical cumulative distribution functions
-$F_{X_{\rm{min}}}$ and $F_{X_{\rm{max}}}$.  These distances serve as
-upper-bounds for the amount of error between the true empirical
-distribution function $F_X$ of the unbinned data and an ECDF
-calculated from the binned data.
-
-<<echo=FALSE,print=FALSE>>=
-PlotAll <- function(x, h) {
-  plot(x, main="x")
-  plot(h)
-  PlotKSDCC(h, 0.3)
-  PlotEMDCC(h)
-}
-@
-
-\subsection{Kolmogorov-Smirnov Distance of the Cumulative Curves}
-
-The first metric provided by the package is the two-sample
-Kolmogorov-Smirnov distance between $X_{\rm{min}}$ and $X_{\rm{max}}$.
-In other words, it the largest possible distance between cumulative
-distribution functions that could be represented by the binned data.
-This metric is more formally defined as
-
-\begin{displaymath}
-\sup_{x} \left | F_{X_{\rm{max}}}(x) - F_{X_{\rm{min}}}(x) \right |
-\end{displaymath}
-
-This function is also occasionally called the maximum displacement of
-the cumulative curves (MDCC).
-
-<<echo=TRUE,print=FALSE>>=
-x <- rexp(1000)
-h <- hist(x, breaks=c(0,1,2,3,4,8,16,32), plot=FALSE)
-x.min <- rep(head(h$breaks, -1), h$counts)
-x.max <- rep(tail(h$breaks, -1), h$counts)
-ks.test(x.min, x.max, exact=F)
-KSDCC(h)
-@
-
-The \code{KSDCC} function accepts a histogram, generates the largest
-and smallest empirical cumulative distribution functions that could be
-represented by that histogram, and then calculates the
-Kolmogorov-Smirnov distance between the two CDFs.  This measure can be
-used in cases where expanding the binned data into \code{x.min} and
-\code{x.max} explicitly to calculate distances using
-e.g. \code{ks.test} directly would not be feasible.
-Figure~\ref{fig:KSDCC} illustrates geometrically what value is being
-returned.
-
-<<hist1mdcc,fig=TRUE,echo=FALSE,print=FALSE,include=FALSE,height=4,width=8>>=
-par(mfrow=c(2,3))
-
-x <- rexp(100)
-h1 <- hist(x, plot=FALSE)
-h2 <- hist(x, breaks=seq(0,round(max(x) + 1),by=0.1), plot=FALSE)
-
-plot(sort(x), main="sort(x)")
-plot(h1)
-PlotKSDCC(h1, 0.2, main="CDF with KSDCC")
-
-plot(sort(x), main="sort(x)")
-plot(h2)
-PlotKSDCC(h2, 0.2, main="CDF with KSDCC")
-@
+In both methods, the mapper tasks must choose identical
+bucket boundaries even though they are analyzing disjoint parts of the
+input set that may cover different ranges, or we must implement
+multiple phases.
 
 \begin{figure}[h!]
 \begin{center}
-\includegraphics[width=6in,height=3in]{HistogramTools-hist1mdcc}
+\includegraphics{histogram-mapreduce-diag1.pdf}
 \end{center}
-\caption{Sorted raw data (column 1), Histograms (column 2), CDF with
-  KSDCC (column 3)}
-\label{fig:KSDCC}
+\caption{Diagram of MapReduce Histogram Generation Pattern}
+\label{fig:mr-histogram-pattern1}
 \end{figure}
 
-\subsection{Earth Mover's Distance of the Cumulative Curves}
-% The histograms above were generated using the default computed
-%breakpoints of R, which uses a modified algorithm from
-%\cite{sturges1926choice}.  However, for our actual data analysis tasks
-%we generate our own bucket widths in advance so that all of our
-%histograms have comparable and consistent bucket boundaries.  For the
-%same distribution, we obviously have control over the histogram bins,
-%and using more fine-grained bins produces a more accurate
-%representation of the underlying distribution.
+Figure~\ref{fig:mr-histogram-pattern1} illustrates the second method
+described above for histogram generation of large data sets with
+MapReduce.
 
-% TODO kind of like iceberg histograms, but not quite. there are
-% references from the database community for what we do and why.
+This package is designed to be helpful if some of the Map or Reduce
+tasks are written in R, or if those components are written in other
+languages and only the resulting output histograms need to be
+manipulated in R.
 
-%A natural question is, are we using a good initial choice of buckets?
-%Which of the 100,000 histograms that we generated last week had the
-%greatest potential error, and how might we change the bucketing to
-%reduce that error?
+%There are really two cookbook recipes for generating histograms of
+%large data sets.  Have each mapper generate an actual histogram, in
+%which case the reducer must merge them.
+
+%Or have each mapper output round to a bucket width and output for
+%every bucket width item then have the reducer sum those up.
+
+%Why do we do the first one?  Why not the second one?
+
+%What is the runtime difference between the two?  Is the second
+%faster?  Or the first?
+
+%TODO:
+%Good diagram for paper showing MapReduce generation of histograms.  As described in Hadoop MapReduce cookbook :
+
+% Histogram makes sense only under a continuous dimension (for example, access time and file % size). It groups the number of occurrences of some event into several groups in the dimension. % For example, in this recipe, if we take the access time from weblogs as the dimension, then we will group the access time by the hour.
 %
-% subsubsection KS
-%
-%Mean Square Error measures the accuracy of an estimator of f in a single point, MISE Mean Integrated Squared Error is the global metric.  But we don't know f for the underlying distribution, since we only have the histogram, so we can't compute these metrics, right?
-%
-%If $F(x)$ is the true empirical CDF of the underying data, and
-%$F_b(x)$ is any estimate of the empirical CDF based on the binned
-%data, then we can compute an error estimate by integrating the
-%difference between the largest and smallest CDFs that could be
-%represented by the binned data.
-%
-% we can use an integrated version of the Kolmogorov-Smirnov
-% distance to compute the error due to our binning.
+%The following figure shows a summary of the execution. Here the mapper calculates the hour of %the day and emits the "hour of the day" and 1 as the key and value respectively. Then each %reducer receives all the occurrences of one hour of a day, and calculates the number of %occurrences:
+% THIS ABOVE IS FROM :
+%\url{http://my.safaribooksonline.com/book/-/9781849517287/6dot-analytics/ch06s06_html}
 
-The ``Earth Mover's Distance'' is like the Kolmogorov-Smirnof
-statistic, but uses an integral to capture the difference across all
-points of the curve rather than just the maximum difference.  This is
-also known as Mallows distance, or Wasserstein distance with $p=1$.
-
-The value of this metric for our histogram $h$ is
-% We remove the \sup because we defined F_max and F_min above.
-% \sup_{F_b,F}
-\begin{displaymath}
-\int_{\mathbb{R}} |F_{X_{\rm{max}}}(x) - F_{X_{\rm{min}}}(x)|dx,
-\end{displaymath}
-
-Figure~\ref{fig:EMDCC} shows the same e.c.d.f of the binned data
-represented in the previous section, but with the yellow boxes
-representing the range of possible values for any real e.c.d.f. having
-the same binned representation.  For any distribution $X$ with the
-binned representation in $h$, the e.c.d.f $F(X)$ will pass only
-through the yellow boxes.  The area of the yellow boxes is the Earth
-Mover's Distance.
-
-<<hist1emdcc,fig=TRUE,echo=FALSE,print=FALSE,include=FALSE,height=4,width=8>>=
-par(mfrow=c(2,3))
-plot(sort(x), main="sort(x)")
-plot(h1)
-PlotEMDCC(h1, main="CDF with EMDCC")
-
-plot(sort(x), main="sort(x)")
-plot(h2)
-PlotEMDCC(h2, main="CDF with EMDCC")
-@
-
-\begin{figure}[h!]
-\begin{center}
-\includegraphics[width=6in,height=3in]{HistogramTools-hist1emdcc}
-\end{center}
-\caption{Sorted raw data (column 1), Histograms (column 2), CDF with
-  EMDCC (column 3)}
-\label{fig:EMDCC}
-\end{figure}
-
-<<echo=TRUE>>=
-x <- rexp(100)
-h1 <- hist(x, plot=FALSE)
-h2 <- hist(x, breaks=seq(0,round(max(x) + 1),by=0.1), plot=FALSE)
-KSDCC(h1)
-KSDCC(h2)
-EMDCC(h1)
-EMDCC(h2)
-@
-
-So, using this metric, the second lower example with more granular
-histogram bins produces an ECDF with reduced worst case error bounds
-compared to the one with default buckets, as expected.
-
-\section{Histogram Bin Manipulation}
-
-\subsection{Trimming Empty Buckets from the Tails}
-
-When generating histograms with a large number of fine-grained
-bucket boundaries, the resulting histograms may have a large
-number of empty consecutive buckets on the left or right side of the
-histogram.  The \code{TrimHistogram} function can be used to remove
-them as illustrated in Figure~\ref{fig:trimhist}.
-
-<<echo=TRUE,print=FALSE>>=
-hist.1 <- hist(runif(100,min=2,max=4), breaks=seq(0,6,by=.2), plot=FALSE)
-hist.trimmed <- TrimHistogram(hist.1)
-@
-
-<<echo=TRUE,print=TRUE>>=
-length(hist.1$counts)
-sum(hist.1$counts)
-length(hist.trimmed$counts)
-sum(hist.trimmed$counts)
-@
-
-<<trimhist,fig=TRUE,echo=TRUE,include=FALSE,width=8,height=4>>=
-par(mfrow=c(1,2))
-plot(hist.1)
-plot(TrimHistogram(hist.1), main="Trimmed Histogram")
-@
-
-\begin{figure}[h!]
-\begin{center}
-\includegraphics[width=5in,height=2.5in]{HistogramTools-trimhist}
-\end{center}
-\caption{Effect of the \code{TrimHistogram} function.}
-\label{fig:trimhist}
-\end{figure}
-
-\subsection{Adding/Merging Histograms}
-
-If histograms (for different data sets) have the same bucket
-boundaries, it is possible to add them together to obtain the
-histogram for the combined data set by aggregating the counts values
-with the \code{AddHistograms} function illustrated in
-Figure~\ref{fig:mergehist}.
-
-<<echo=TRUE,print=FALSE>>=
-hist.1 <- hist(c(1,2,3,4), plot=FALSE)
-hist.2 <- hist(c(1,2,2,4), plot=FALSE)
-hist.sum <- AddHistograms(hist.1, hist.2)
-@
-
-<<mergehist,fig=TRUE,echo=FALSE,include=FALSE,width=8,height=4>>=
-par(mfrow=c(1,3))
-plot(hist.1)
-plot(hist.2)
-plot(hist.sum,main="Aggregated Histogram")
-@
-
-\begin{figure}[h!]
-\begin{center}
-\includegraphics[width=5in,height=2.5in]{HistogramTools-mergehist}
-\end{center}
-\caption{Effect of the \code{AddHistograms} function.}
-\label{fig:mergehist}
-\end{figure}
-
-\code{AddHistograms} accepts an arbitrary number of histogram objects
-to aggregate as long as they have the same bucket boundaries.
-
-<<<echo=TRUE,print=FALSE>>=
-  hist.1 <- hist(c(1,2,3), breaks=0:9, plot=FALSE)
-  hist.2 <- hist(c(1,2,3), breaks=0:9, plot=FALSE)
-  hist.3 <- hist(c(4,5,6), breaks=0:9, plot=FALSE)
-  hist.sum <- AddHistograms(hist.1, hist.2, hist.3)
-  hist.sum
-@
-
-\subsection{Merging Buckets}
-
-We may want a version of a histogram with fewer buckets, to save
-storage or to produce better plots.  The \code{MergeBuckets} function takes
-a histogram and a parameter for the number of adjacent buckets to
-merge together and returns a new histogram with different bucket
-boundaries as illustrated in Figure~\ref{fig:downsamplehist}.
-
-<<echo=TRUE,print=FALSE>>=
-overbinned <- hist(c(rexp(100), 1+rexp(100)), breaks=seq(0, 10, by=.01), plot=FALSE)
-better.hist <- MergeBuckets(overbinned, adj=30)
-@
-
-<<downsamplehist,fig=TRUE,echo=FALSE,print=FALSE,include=FALSE,width=8,height=4>>=
-par(mfrow=c(1,2))
-plot(overbinned)
-plot(better.hist)
-@
-
-\begin{figure}[h!]
-\begin{center}
-\includegraphics[width=3.3in,height=2.5in]{HistogramTools-downsamplehist}
-\end{center}
-\caption{Effect of the \code{MergeBuckets} function.}
-\label{fig:downsamplehist}
-\end{figure}
-
-\subsection{Subsetting Histograms}
-
-% If, say you are only interested in part of a distribution, for
-% example for performance measurements the requests that had a latency
-% of greater than X seconds only.  Then the SubsetHistogram()
-% functions can help manipulate the histograms to zoom in on an area
-% of interest for additional plotting.
-
-The \code{SubsetHistogram} function takes a histogram and a new
-minimum and maximum bucket boundary and returns a new histogram with a
-subset of the buckets as illustrated in Figure~\ref{fig:subsethist}.
-
-% TODO(mstokely): Add reference to iceberg queries, database work in
-% this area.
-
-<<echo=TRUE,print=FALSE>>=
-hist.1 <- hist(runif(100, min=0, max=10), breaks=seq(from=0, to=10, by=.5), plot=FALSE)
-hist.2 <- SubsetHistogram(hist.1, minbreak=2, maxbreak=6)
-@
-
-<<subsethist,fig=TRUE,echo=FALSE,print=FALSE,include=FALSE,width=5.3,height=4>>=
-par(mfrow=c(1,2))
-plot(hist.1, main="hist.1")
-plot(hist.2, main="hist.2")
-@
-
-\begin{figure}[h!]
-\begin{center}
-\includegraphics[width=3.3in,height=2.5in]{HistogramTools-subsethist}
-\end{center}
-\caption{Effect of the \code{SubsetHistogram} function.}
-\label{fig:subsethist}
-\end{figure}
-
-%\begin{figure}[h!]
-%\begin{center}
-%\includegraphics[width=5in,height=2.5in]{HistogramTools-downsamplehist}
-%\end{center}
-%\caption{Effect of the \code{MergeBuckets} function.}
-%\label{fig:downsamplehist}
-%\end{figure}
-
-% TODO
-% \section{Extensions}
-%\subsection{Exemplar Histograms}
-% TODO
-%
-
-%Sharing Histograms Between Tools
-%In a big data analysis task, we may combine many different tools and languages.  For example, high-performance C++ or Java code might process millions of records to generate histograms and then serialize them (using e.g. Protocol buffers or Thrift) to a data store.
-%Other code in Python or R may analyze, merge, clean the resulting outputs.  Finally, a front-end dashboard may read in a JSON representation of the cleaned histograms from the datastore into an interactive Javascript web isualization (sing e.g. D3 (\cite{bostock2011d3}) or Gviz)
-%Implementation details:
-%
-%- Benchmarks of Merge operation
-%Benchmarks
-%Compare size of R serialized histograms and RProtoBuf serialized histograms.
-%%
-%code snippet:
-%
-%Table:  columns:  serialized size, serialized time (ms)
-%rows:  R serialize, Rprotobuf naive implementation, RProtobuf C++ optimized implementation
-
-
-%TODO Table example performance analysis.
-% label=tab1,echo=FALSE,results=tex>>=
-%require(xtable)
-%foo <- data.frame(a=c(1,2,3,4),b=c(5,6,7,8))
-%print(xtable(foo, caption="Example Caption", center="centering", file="", label="tab:one",floating=FALSE))
-%@
-%
-%Now we have an example reference to Table\ref{tab:one}.
-
-\section{Visualization}
-
-\subsection{Average Shifted Histograms}
-
-Average shifted histograms are a simple device for taking a collection
-of $m$ histograms each with uniform bin width $h$, but with bin
-origins offset/shifted \citep{scott2009multivariate}.
-
-Given the focus of this package on large data sets, a HistToASH
-function is provided to produce the average shifted histogram from a
-single histogram assuming the underlying dataset is no longer
-available in unbinned form.  The next plot shows the original density histogram
-of the overlaid with the average shifted histogram with smoothing
-parameter 5.
-
-<<fig=TRUE>>=
-x <- runif(1000, min=0, max=100)
-h <- hist(x, breaks=0:100, plot=F)
-
-plot(h,freq=FALSE, main="Histogram of x with ASH superimposed in red")
-# Superimpose the Average Shifted Histogram on top of the original.
-lines(HistToASH(h), col="red")
-@ 
-
-\subsection{Log-scale Histograms}
-
-Many histograms encountered in databases, distributed systems, and
-other areas of computer science use log-scaled bucket boundaries
-and may still contain counts that vary exponentially.
-
-Examples of such data sets include the size or age of files stored, or
-the latency enountered by read requests.  Such histograms can be read
-into R using the methods of this package, but the default plotting
-functionality is not very useful.
-
-For example, Figure~\ref{fig:logloghist} shows the default plot output
-for the histogram of read sizes observed when building a FreeBSD
-kernel.  Neither the density histogram (left) nor the frequency
-histogram (middle) make it easy to understand the distribution.  In
-contract, the log ECDF produced by the \code{PlotLog2ByteEcdf}
-function makes it easy to see that about 20\% of the reads were of 64
-bytes or smaller, and that the median read size was well under a
-kilobyte.
-
-<<logloghist,fig=TRUE,include=FALSE,echo=FALSE,height=4,width=8>>=
-par(mfrow=c(1,3))
-filename <- system.file("unitTests/data/buildkernel-readsize-dtrace.txt",
-                        package="HistogramTools")
-dtrace.hists <- ReadHistogramsFromDtraceOutputFile(filename)
-plot(dtrace.hists[["TOTAL"]], main="", freq=FALSE)
-plot(dtrace.hists[["TOTAL"]], main="", freq=TRUE)
-PlotLog2ByteEcdf(dtrace.hists[["TOTAL"]])
-@
-
-\begin{figure}[h]
-\begin{center}
-\includegraphics[width=5in,height=2.5in]{HistogramTools-logloghist}
-\end{center}
-\caption{Example Log Log Histogram Data}
-\label{fig:logloghist}
-\end{figure}
+%\section{Applications}
+%Very large data sets in Pearson's day meant more than 100 observations, but analysis of web-scale data, such as the number of unlinks in the trillions of pages on the web requires significantly larger computation resources.
+%Pearson was interested in very large data sets (more than 1000)
 
 \section{Summary}
 The HistogramTools package presented in this paper has been in wide

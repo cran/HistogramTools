@@ -1,4 +1,35 @@
-2013-10-01  Murray Stokely  <murray@FreeBSD.org>
+2013-12-11  Murray Stokely  <mstokely@google.com>
+
+	* DESCRIPTION (Version): Increment to 3.0
+	* man/binning.Rd: Document PreBinnedHistogram.
+	* vignettes/HistogramTools-quickref.Rnw: Add new functions to table.
+
+2013-12-07  Murray Stokely  <mstokely@google.com>
+
+	* vignettes/HistogramTools.Rnw: Reorganize vignette in a more
+	  coherent way and document new functions.
+	* DESCRIPTION (Imports): Move Hmisc from Depends to Imports.
+	* man/intersect.Rd: Document the IntersectHistograms function.
+
+2013-12-06  Murray Stokely  <mstokely@google.com>
+
+	* DESCRIPTION (Version): Increment.
+	* R/bindist.R (intersect.dist): Add histogram distance measures.
+	* man/bindist.Rd: Document new functions.
+	* man/histogram-package.Rd: Idem.
+
+2013-10-09  Murray Stokely  <mstokely@google.com>
+
+	* DESCRIPTION (Version): Increment.
+	* R/histogram.R (ScaleHistogram): Add a ScaleHistogram function
+	  for when counts need to be scaled as part of post-processing the data.
+	* R/plot.R (PlotRelativeFrequency): Add a PlotRelativeFrequency
+	  function since R only allows frequency and density by default.
+	* man/scale.Rd: Document new functionality.
+	* man/plothist.Rd: Idem.
+	* man/histogram-package.Rd: Idem.
+
+2013-10-01  Murray Stokely  <mstokely@google.com>
 
 	* R/histogram.R (as.Message.histogram): Prefix RProtoBuf calls
 	  with RProtoBuf:: too appease R CMD CHECK.
@@ -8,7 +39,7 @@
 	* DESCRIPTION (Depends): Remove unused dependency on methods.
 	* NAMESPACE: Tighten up what we import and export.
 
-2013-09-30  Murray Stokely  <murray@FreeBSD.org>
+2013-09-30  Murray Stokely  <mstokely@google.com>
 
 	* R/plot.R (PlotLog2ByteEcdf): Add function for creating better
 	  Ecdfs of data binned on power of 2 boundaries (bytes).
@@ -16,18 +47,18 @@
 	* vignettes/HistogramTools.Rnw (subsection{Log-scale Histograms}): 
 	  Document the above.
 
-2013-09-15  Murray Stokely  <murray@FreeBSD.org>
+2013-09-15  Murray Stokely  <mstokely@google.com>
 
 	* vignettes/HistogramTools-UnitTests.Rnw: Add a vignette showing
 	  results of the unit tests.
 
-2013-09-14  Murray Stokely  <murray@FreeBSD.org>
+2013-09-14  Murray Stokely  <mstokely@google.com>
 
 	* R/ash.R (HistToASH): Implement support for smoothing out a
 	  histogram with average shifted histograms from ash package.
 	* vignettes/HistogramTools.Rnw: Document the above.
 
-2013-09-13  Murray Stokely  <murray@FreeBSD.org>
+2013-09-13  Murray Stokely  <mstokely@google.com>
 
 	* DESCRIPTION: Update date, move RProtoBuf to enhances line.
 	* vignettes/HistogramTools.Rnw: Make this build without

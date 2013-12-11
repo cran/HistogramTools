@@ -47,14 +47,14 @@ KSDCC(h)
 
 
 ###################################################
-### code chunk number 6: HistogramTools-quickref.Rnw:130-132 (eval = FALSE)
+### code chunk number 6: HistogramTools-quickref.Rnw:132-134 (eval = FALSE)
 ###################################################
 ## hist.msg <- as.Message(h)
 ## length(hist.msg$serialize(NULL))
 
 
 ###################################################
-### code chunk number 7: HistogramTools-quickref.Rnw:134-138
+### code chunk number 7: HistogramTools-quickref.Rnw:136-140
 ###################################################
 if(require(RProtoBuf)) {
   hist.msg <- as.Message(h)

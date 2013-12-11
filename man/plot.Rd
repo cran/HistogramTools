@@ -27,12 +27,12 @@ with a range from 1 second to 10 years.
 }
 \usage{
 PlotLog2ByteEcdf(x, xlab="Bytes (log)",
-                 ylab="Cumulative Fraction", with.grid=TRUE, ...)
+                 ylab="Cumulative Fraction", with.grid=TRUE, \dots)
 PlotLogTimeDurationEcdf(x, with.grid=TRUE,
                         xlab="Age (log)",
                         ylab="Cumulative Fraction",
                         cex.lab=1.6,
-                        cex.axis=1.6, ...)
+                        cex.axis=1.6, \dots)
 }
 \arguments{
   \item{x}{A \code{"histogram"} object (created by
@@ -41,11 +41,11 @@ PlotLogTimeDurationEcdf(x, with.grid=TRUE,
     \code{\link{HistToEcdf}}).}
   \item{xlab}{x-axis label for the Ecdf plot.}
   \item{ylab}{y-axis label for the Ecdf plot.}
-  \item{with.grid}{Logical.  If TRUE, draw faint grid lines on the ECDF
+  \item{with.grid}{Logical.  If \code{TRUE}, draw faint grid lines on the ECDF
     plot.}
   \item{cex.lab}{Graphical parameters for plot and axes.}
   \item{cex.axis}{Graphical parameters for plot and axes.}
-  \item{...}{Additional parameters are passed to
+  \item{\ldots}{Additional parameters are passed to
     \code{\link[graphics]{plot}()}.}
 }
 \details{
